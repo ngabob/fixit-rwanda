@@ -1,4 +1,5 @@
 import { serviceNames } from './public/services.js';
+import { guestRequest, guestRequestQuery, insertGuestRequest, rwandaMobile } from './guest-requests.js';
 import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -46,6 +47,21 @@ db.exec(`
 if (!db.prepare('PRAGMA table_info(profiles)').all().some(column => column.name === 'phone')) {
   db.exec('ALTER TABLE profiles ADD COLUMN phone TEXT');
 }
+
+if (!db.prepare('PRAGMA table_info(profiles)').all().some(column => column.name === 'sms_opt_in')) {
+  db.exec('ALTER TABLE profiles ADD COLUMN sms_opt_in INTEGER NOT NULL DEFAULT 0');
+}
+db.exec(`CREATE TABLE IF NOT EXISTS guest_requests (
+  id TEXT PRIMARY KEY, pro_id INTEGER NOT NULL REFERENCES profiles(id),
+  customer TEXT NOT NULL, phone TEXT NOT NULL, email TEXT,
+  title TEXT NOT NULL, details TEXT NOT NULL,
+  category TEXT NOT NULL, district TEXT NOT NULL,
+  email_status TEXT NOT NULL DEFAULT 'pending',
+  sms_status TEXT NOT NULL DEFAULT 'pending',
+  created TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS guest_requests_professional ON guest_requests(pro_id, created);`);
 
 const districts = ['Gasabo', 'Kicukiro', 'Nyarugenge'];
 const select = (sql, ...params) => db.prepare(sql).all(...params);
@@ -167,7 +183,7 @@ if (demo) {
 const profileFieldsSql = 'p.id, p.category, p.district, p.bio, p.visible, p.sample, u.name';
 const profileSource = ' FROM profiles p JOIN users u ON u.id=p.id';
 const profileQuery = 'SELECT ' + profileFieldsSql + profileSource;
-const adminProfileQuery = 'SELECT ' + profileFieldsSql + ', p.phone' + profileSource;
+const adminProfileQuery = 'SELECT ' + profileFieldsSql + ', p.phone, p.sms_opt_in' + profileSource;
 const jobQuery = `SELECT j.*, customer.name AS customer, pro.name AS professional,
   q.amount, q.note FROM jobs j JOIN users customer ON customer.id=j.customer_id
   JOIN users pro ON pro.id=j.pro_id LEFT JOIN quotes q ON q.job_id=j.id`;
@@ -196,7 +212,7 @@ async function api(req, res, url) {
     const role = managed ? 'pro' : body.role;
     if (!['customer', 'pro'].includes(role)) fail(400, 'invalid');
     const profile = role === 'pro' ? profileFields(body) : null;
-    const phone = managed ? contactPhone(body.phone) : null;
+    const phone = role === 'pro' ? contactPhone(body.phone) : null;
     const id = transaction(() => {
       if (one('SELECT id FROM users WHERE email=?', email)) fail(409, 'emailTaken');
       const id = addUser(name, email, password, role);
@@ -224,18 +240,39 @@ async function api(req, res, url) {
     if (user.role === 'admin') return {
       profiles: select(adminProfileQuery + " WHERE u.role='pro' ORDER BY u.name"),
       jobs: select(jobQuery + ' ORDER BY j.id DESC'),
+      guestRequests: select(guestRequestQuery + ' ORDER BY g.created DESC LIMIT 100'),
       accounts: select("SELECT role, COUNT(*) AS total FROM users WHERE role<>'archived' GROUP BY role")
     };
     const column = user.role === 'pro' ? 'pro_id' : 'customer_id';
     return {
       jobs: select(jobQuery + ' WHERE j.' + column + '=? ORDER BY j.id DESC', user.id),
-      profile: user.role === 'pro' ? one(profileQuery + ' WHERE p.id=?', user.id) : null
+      profile: user.role === 'pro' ? one(adminProfileQuery + ' WHERE p.id=?', user.id) : null,
+      guestRequests: user.role === 'pro' ? select(guestRequestQuery + ' WHERE g.pro_id=? ORDER BY g.created DESC LIMIT 100', user.id) : []
     };
   }
   if (route === 'POST /api/profile') {
     requireRole('pro');
-    const fields = profileFields(await readBody(req));
-    run('UPDATE profiles SET category=?,district=?,bio=? WHERE id=?', ...fields, user.id);
+    const body = await readBody(req);
+    const fields = profileFields(body);
+    const prev = one('SELECT phone,sms_opt_in FROM profiles WHERE id=?', user.id);
+    const phone = body.phone === undefined ? prev.phone : contactPhone(body.phone);
+    const optedIn = body.phone === undefined ? prev.sms_opt_in : Number(body.smsOptIn === true);
+    if (optedIn && !rwandaMobile(phone)) fail(400, 'smsMobile');
+    run('UPDATE profiles SET category=?,district=?,bio=?,phone=?,sms_opt_in=? WHERE id=?',
+      ...fields, phone, optedIn, user.id);
+    return {};
+  }
+  if (route === 'POST /api/guest-requests') {
+    const body = await readBody(req);
+    const values = guestRequest(body, field, contactPhone, fail);
+    const proId = Number(body.proId);
+    if (!Number.isSafeInteger(proId) || proId < 1) fail(400, 'invalid');
+    const inserted = run(insertGuestRequest, ...values, proId);
+    if (inserted.changes) {
+      run("UPDATE guest_requests SET email_status='unconfigured',sms_status='unconfigured' WHERE id=?", values[0]);
+    } else if (!one('SELECT id FROM guest_requests WHERE id=? AND pro_id=?', values[0], proId)) {
+      fail(404, 'missing');
+    }
     return {};
   }
   if (route === 'POST /api/jobs') {

@@ -55,3 +55,6 @@ nav { position: relative; }
 .explore-group a:hover { background: #edf4e3; }
 .search label { min-width: 0; }
 @media(max-width:570px) { .explore-panel { left: 0; right: auto; } }
+
+.form .check-label { display: flex; align-items: center; gap: 8px; }
+.check-label input { width: auto; }

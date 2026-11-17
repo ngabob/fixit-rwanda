@@ -4,11 +4,35 @@
   "compatibility_date": "2026-11-16",
   "workers_dev": true,
   "preview_urls": false,
-  "assets": { "directory": "./public", "run_worker_first": ["/api/*"] },
-  "d1_databases": [{ "binding": "DB", "database_name": "fixit-rwanda", "database_id": "c486e104-7732-4b92-bf12-1b182ba0a2e8" }],
-  "ratelimits": [{
-    "name": "AUTH_LIMIT",
-    "namespace_id": "1001",
-    "simple": { "limit": 12, "period": 60 }
-  }]
+  "assets": {
+    "directory": "./public",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fixit-rwanda",
+      "database_id": "c486e104-7732-4b92-bf12-1b182ba0a2e8"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "AUTH_LIMIT",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 12,
+        "period": 60
+      }
+    },
+    {
+      "name": "REQUEST_LIMIT",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 5,
+        "period": 60
+      }
+    }
+  ]
 }

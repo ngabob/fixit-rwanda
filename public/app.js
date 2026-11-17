@@ -7,7 +7,13 @@ const copy = {
     service:'Service', district:'District', allServices:'All services', allDistricts:'All districts',
     categories:'Explore services', results:'Local professionals', found:'Profiles found', empty:'No professionals match your search.',
     sample:'Demo profile', sampleBio:'Sample profile for practicing the quote workflow.', profile:'View profile', details:'Describe the work',
-    request:'Request a quote', title:'Job title', signRequest:'Sign in as a customer to send a request.', customerOnly:'Customers can send job requests.',
+    request:'Request a quote', title:'Job title', guestName:'Your full name', optionalEmail:'Email (optional)',
+    guestNotice:'Your contact information and job details will be shared with this professional so they can reply directly.',
+    requestReceived:'Request received. The professional can contact you directly about your quote.',
+    guestRequests:'Requests from guests', emailAlert:'Email alert', smsAlert:'SMS alert',
+    smsOptIn:'Text me when a customer requests a quote', smsMobile:'Enter a Rwanda mobile number to receive text alerts.',
+    pending:'Pending', acceptedAlert:'Accepted by provider', unconfigured:'Not configured',
+    disabled:'Disabled', failed:'Failed', unknown:'Unknown',
     back:'Back to search', name:'Full name or business name', email:'Email', password:'Password (at least 8 characters)',
     role:'Account type', customer:'Customer', pro:'Professional', admin:'Administrator', bio:'About your services',
     save:'Save profile', jobs:'Job requests', noJobs:'There are no job requests yet.', opened:'Awaiting quote', quoted:'Quote sent',
@@ -28,7 +34,13 @@ const copy = {
     service:'Serivisi', district:'Akarere', allServices:'Serivisi zose', allDistricts:'Uturere twose',
     categories:'Reba serivisi', results:'Abanyamwuga bo hafi yawe', found:'Abanyamwuga babonetse', empty:'Nta munyamwuga uhuye n’ibyo washakishije.',
     sample:'Umwirondoro w’igerageza', sampleBio:'Umwirondoro w’igerageza wo kwitoza gusaba no gutanga igiciro.', profile:'Reba umwirondoro', details:'Sobanura akazi',
-    request:'Saba igiciro', title:'Izina ry’akazi', signRequest:'Injira nka umukiriya kugira ngo wohereze ubusabe.', customerOnly:'Abakiriya ni bo bashobora gusaba serivisi.',
+    request:'Saba igiciro', title:'Izina ry’akazi', guestName:'Amazina yawe yose', optionalEmail:'Imeyili (si ngombwa)',
+    guestNotice:'Amakuru yo kukuvugisha n’ibisobanuro by’akazi bizahabwa uyu munyamwuga kugira ngo akuvugishe.',
+    requestReceived:'Ubusabe bwakiriwe. Umunyamwuga ashobora kukuvugisha akakubwira igiciro.',
+    guestRequests:'Ubusabe bw’abakiriya badafite konti', emailAlert:'Imenyesha kuri imeyili', smsAlert:'Imenyesha kuri SMS',
+    smsOptIn:'Nyohereza SMS igihe umukiriya asabye igiciro', smsMobile:'Andika nimero ya telefoni igendanwa yo mu Rwanda kugira ngo wakire SMS.',
+    pending:'Birategereje', acceptedAlert:'Byakiriwe n’utanga serivisi', unconfigured:'Ntibirashyirwaho',
+    disabled:'Birazimye', failed:'Byanze', unknown:'Ntibizwi',
     back:'Subira mu ishakisha', name:'Amazina yawe cyangwa izina ry’ubucuruzi', email:'Imeyili', password:'Ijambobanga (inyuguti nibura 8)',
     role:'Ubwoko bwa konti', customer:'Umukiriya', pro:'Umunyamwuga', admin:'Umuyobozi', bio:'Sobanura serivisi utanga',
     save:'Bika umwirondoro', jobs:'Ubusabe bw’akazi', noJobs:'Nta busabe bw’akazi buraboneka.', opened:'Bitegereje igiciro', quoted:'Igiciro cyoherejwe',
@@ -51,7 +63,6 @@ let user = null;
 let filter = { category:'', district:'' };
 let viewVersion = 0;
 let message = '';
-let returnTo = '';
 const main = document.querySelector('main');
 const nav = document.querySelector('nav');
 const t = key => copy[language][key] || serviceNames.get(key)?.[language] || key;
@@ -101,6 +112,10 @@ function serviceSelector(selected, first) {
     options(services.map(([id]) => id), selected, null, true) + '</optgroup>'
   ).join('');
   return '<select name="category">' + options([], selected, first) + groups + '</select>';
+}
+function phoneField(value = '') {
+  return label('phone','<input type="tel" required name="phone" autocomplete="tel" maxlength="30" value="' +
+    e(value) + '">');
 }
 function profileFields(p = {}) {
   return label('service',serviceSelector(p.category || 'plumbing')) +
@@ -171,7 +186,7 @@ function auth(register, proSignup) {
   const fields = (register ? label('name',field('name','text',2,80)) : '') +
     label('email',field('email','email',3,254)) + label('password',field('password','password',8,128)) +
     (register ? label('role',selector('role',['customer','pro'],proSignup ? 'pro' : 'customer',null,true)) +
-      '<div class="form" id="pro-fields">' + profileFields() + '</div>' : '');
+      '<div class="form" id="pro-fields">' + phoneField() + profileFields() + '</div>' : '');
   main.innerHTML = page(register ? 'join' : 'signIn', '<div class="panel stack">' +
     (register ? '<p>' + t('signupHint') + '</p>' : '') +
     form(mode,fields,register ? 'join' : 'signIn') +
@@ -183,25 +198,26 @@ function auth(register, proSignup) {
     const section = document.querySelector('#pro-fields');
     function sync() {
       section.hidden = authForm.elements.role.value !== 'pro';
-      for (const input of section.querySelectorAll('select,textarea')) input.disabled = section.hidden;
+      for (const input of section.querySelectorAll('input,select,textarea')) input.disabled = section.hidden;
     }
     authForm.elements.role.onchange = sync;
     sync();
   }
 }
 function professional(p) {
-  const route = 'pro/' + p.id;
-  let action = '<p>' + t('customerOnly') + '</p>';
-  if (!user) action = '<p>' + t('signRequest') + '</p>' + link('login','signIn','button quiet profile-link');
-  if (user?.role === 'customer') action = form('jobs',
+  const action = form('guest-requests',
     '<input type="hidden" name="proId" value="' + p.id + '">' +
-    label('title',field('title','text',4,100)) + label('details',textArea('details',10,1000)), 'request');
+    '<input type="hidden" name="requestId" value="' + crypto.randomUUID() + '">' +
+    label('guestName','<input required name="customer" autocomplete="name" minlength="2" maxlength="80">') +
+    phoneField() +
+    label('optionalEmail','<input type="email" name="email" autocomplete="email" maxlength="254">') +
+    label('title',field('title','text',4,100)) + label('details',textArea('details',10,1000)) +
+    '<p class="muted">' + t('guestNotice') + '</p>', 'request');
   main.innerHTML = page('profile','<div class="stack">' + link('home','back') +
     '<article class="panel stack">' + profileLine(p) +
     (p.sample ? '<small class="tag">' + t('sample') + '</small>' : '') +
     '<p class="pre">' + bio(p) + '</p></article><section class="panel stack"><h2>' + t('request') + '</h2>' +
     action + '</section></div>',true);
-  if (!user) main.querySelector('a[href="#login"]').onclick = () => { returnTo = route; };
 }
 function jobCard(job) {
   let action = '';
@@ -220,6 +236,16 @@ function jobCard(job) {
     e(job.customer) + ' → ' + e(job.professional) + ' · ' + t(job.category) + ' · ' + e(job.district) +
     '</small><p class="pre">' + e(job.details) + '</p>' + quote + action + '</article>';
 }
+function guestCard(request) {
+  const statusLabel = value => t(value === 'accepted' ? 'acceptedAlert' : value);
+  const delivery = user.role === 'admin' ? '<small>' + t('emailAlert') + ' · ' + statusLabel(request.email_status) +
+    ' / ' + t('smsAlert') + ' · ' + statusLabel(request.sms_status) + '</small>' : '';
+  return '<article class="panel stack"><h3>' + e(request.title) + '</h3><small>' +
+    e(request.customer) + ' → ' + e(request.professional) + ' · ' + t(request.category) + ' · ' +
+    e(request.district) + '</small><p><a href="tel:' + e(request.phone) + '">' + e(request.phone) + '</a>' +
+    (request.email ? ' · <a href="mailto:' + e(request.email) + '">' + e(request.email) + '</a>' : '') +
+    '</p><p class="pre">' + e(request.details) + '</p>' + delivery + '</article>';
+}
 function dashboard(data) {
   const jobs = data.jobs.length ? data.jobs.map(jobCard).join('') : '<p>' + t('noJobs') + '</p>';
   let heading = 'mine';
@@ -227,7 +253,9 @@ function dashboard(data) {
   if (user.role === 'pro') {
     heading = 'received';
     panels = '<section class="panel stack"><h2>' + t('profile') + '</h2>' +
-      form('profile',profileFields(data.profile),'save') + '</section>';
+      form('profile',profileFields(data.profile) + phoneField(data.profile.phone) +
+        '<label class="check-label"><input type="checkbox" name="smsOptIn"' +
+        (data.profile.sms_opt_in ? ' checked' : '') + '> ' + t('smsOptIn') + '</label>','save') + '</section>';
   }
   if (user.role === 'admin') {
     heading = 'jobs';
@@ -237,7 +265,7 @@ function dashboard(data) {
       '</div></section><section class="panel stack"><h2>' + t('addPro') + '</h2>' +
       form('admin/professionals', label('name',field('name','text',2,80)) +
         label('email',field('email','email',3,254)) +
-        label('phone','<input type="tel" required name="phone" autocomplete="tel" maxlength="30">') +
+        phoneField() +
         label('proPassword','<input required type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128">') +
         profileFields(),'addPro') +
       '</section><section class="panel stack"><h2>' + t('profiles') + '</h2>' +
@@ -252,7 +280,8 @@ function dashboard(data) {
   }
   main.innerHTML = page(user.role === 'admin' ? 'adminTitle' : 'dashboard','<div class="stack">' +
     (message ? '<p class="success" role="status">' + t(message) + '</p>' : '') +
-    panels + '<h2>' + t(heading) + '</h2>' + jobs + '</div>',user.role !== 'admin');
+    panels + (data.guestRequests?.length ? '<h2>' + t('guestRequests') + '</h2>' +
+      data.guestRequests.map(guestCard).join('') : '') + '<h2>' + t(heading) + '</h2>' + jobs + '</div>',user.role !== 'admin');
   message = '';
 }
 function exploreMenu() {
@@ -293,7 +322,6 @@ async function render() {
     try {
       await api('logout',{});
       user = null;
-      returnTo = '';
       navigate('home');
     } catch (error) {
       main.innerHTML = page(error.message,'',true);
@@ -339,16 +367,23 @@ main.addEventListener('submit',async event => {
   const submit = form.querySelector('button');
   const errorBox = form.querySelector('.feedback');
   const data = Object.fromEntries(new FormData(form));
+  if (action === 'profile') data.smsOptIn = form.elements.smsOptIn.checked;
   if (action === 'moderate') data.visible = data.visible === 'true';
   submit.disabled = true;
   errorBox.textContent = '';
   try {
     const result = await api(action,data);
-    if (result.user) {
+    if (action === 'guest-requests') {
+      const confirmation = document.createElement('p');
+      confirmation.className = 'success';
+      confirmation.setAttribute('role','status');
+      confirmation.tabIndex = -1;
+      confirmation.textContent = t('requestReceived');
+      form.replaceWith(confirmation);
+      confirmation.focus();
+    } else if (result.user) {
       user = result.user;
-      const next = user.role === 'customer' && returnTo ? returnTo : 'dashboard';
-      returnTo = '';
-      navigate(next);
+      navigate('dashboard');
     } else {
       message = 'saved';
       navigate('dashboard');

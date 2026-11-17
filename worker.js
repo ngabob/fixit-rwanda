@@ -1,5 +1,8 @@
 import { serviceNames } from './public/services.js';
 
+import { guestRequest, guestRequestQuery, insertGuestRequest, rwandaMobile } from './guest-requests.js';
+import { notifyProfessional } from './quote-notifications.js';
+
 const encoder = new TextEncoder();
 const cookieAttributes = '; Path=/; HttpOnly; SameSite=Strict; Secure';
 const hex = bytes => Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2,'0')).join('');
@@ -74,13 +77,13 @@ function profileFields(body) {
 const profileFieldsSql = 'p.id, p.category, p.district, p.bio, p.visible, p.sample, u.name';
 const profileSource = ' FROM profiles p JOIN users u ON u.id=p.id';
 const profileQuery = 'SELECT ' + profileFieldsSql + profileSource;
-const adminProfileQuery = 'SELECT ' + profileFieldsSql + ', p.phone' + profileSource;
+const adminProfileQuery = 'SELECT ' + profileFieldsSql + ', p.phone, p.sms_opt_in' + profileSource;
 const jobQuery = `SELECT j.*, customer.name AS customer, pro.name AS professional,
   q.amount, q.note FROM jobs j JOIN users customer ON customer.id=j.customer_id
   JOIN users pro ON pro.id=j.pro_id LEFT JOIN quotes q ON q.job_id=j.id`;
 
 
-async function api(req, headers, url, env) {
+async function api(req, headers, url, env, context) {
   const db = env.DB;
   const stmt = (sql,...params) => db.prepare(sql).bind(...params);
   const one = (sql,...params) => stmt(sql,...params).first();
@@ -125,7 +128,7 @@ async function api(req, headers, url, env) {
     const role = managed ? 'pro' : body.role;
     if (!['customer', 'pro'].includes(role)) fail(400, 'invalid');
     const profile = role === 'pro' ? profileFields(body) : null;
-    const phone = managed ? contactPhone(body.phone) : null;
+    const phone = role === 'pro' ? contactPhone(body.phone) : null;
     const hash = await passwordHash(password);
     const statements = [stmt(
       'INSERT INTO users(name,email,password,role) VALUES (?,?,?,?) ON CONFLICT(email) DO NOTHING',
@@ -160,18 +163,44 @@ async function api(req, headers, url, env) {
     if (user.role === 'admin') return {
       profiles: await select(adminProfileQuery + " WHERE u.role='pro' ORDER BY u.name"),
       jobs: await select(jobQuery + ' ORDER BY j.id DESC'),
+      guestRequests: await select(guestRequestQuery + ' ORDER BY g.created DESC LIMIT 100'),
       accounts: await select("SELECT role, COUNT(*) AS total FROM users WHERE role<>'archived' GROUP BY role")
     };
     const column = user.role === 'pro' ? 'pro_id' : 'customer_id';
     return {
       jobs: await select(jobQuery + ' WHERE j.' + column + '=? ORDER BY j.id DESC', user.id),
-      profile: user.role === 'pro' ? await one(profileQuery + ' WHERE p.id=?', user.id) : null
+      profile: user.role === 'pro' ? await one(adminProfileQuery + ' WHERE p.id=?', user.id) : null,
+      guestRequests: user.role === 'pro' ? await select(guestRequestQuery + ' WHERE g.pro_id=? ORDER BY g.created DESC LIMIT 100', user.id) : []
     };
   }
   if (route === 'POST /api/profile') {
     requireRole('pro');
-    const fields = profileFields(await readBody(req));
-    await run('UPDATE profiles SET category=?,district=?,bio=? WHERE id=?', ...fields, user.id);
+    const body = await readBody(req);
+    const fields = profileFields(body);
+    const prev = await one('SELECT phone,sms_opt_in FROM profiles WHERE id=?', user.id);
+    const phone = body.phone === undefined ? prev.phone : contactPhone(body.phone);
+    const optedIn = body.phone === undefined ? prev.sms_opt_in : Number(body.smsOptIn === true);
+    if (optedIn && !rwandaMobile(phone)) fail(400, 'smsMobile');
+    await run('UPDATE profiles SET category=?,district=?,bio=?,phone=?,sms_opt_in=? WHERE id=?',
+      ...fields, phone, optedIn, user.id);
+    return {};
+  }
+  if (route === 'POST /api/guest-requests') {
+    const body = await readBody(req);
+    const values = guestRequest(body, field, contactPhone, fail);
+    const proId = idField(body.proId);
+    const ip = req.headers.get('CF-Connecting-IP') || 'unknown';
+    if (!(await env.REQUEST_LIMIT.limit({key: ip})).success) fail(429, 'tryLater');
+    const inserted = await run(insertGuestRequest, ...values, proId);
+    if (!inserted.changes) {
+      if (!(await one('SELECT id FROM guest_requests WHERE id=? AND pro_id=?', values[0], proId))) {
+        fail(404, 'missing');
+      }
+      return {};
+    }
+    context.waitUntil(notifyProfessional(env, values[0], url.origin).catch(() => {
+      console.error('Could not record guest-request notification status');
+    }));
     return {};
   }
   if (route === 'POST /api/jobs') {
@@ -236,7 +265,7 @@ async function api(req, headers, url, env) {
 }
 
 export default {
-  async fetch(req,env) {
+  async fetch(req,env,context) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) return new Response('Not found',{status:404});
     const headers = new Headers({
@@ -244,7 +273,7 @@ export default {
       'X-Content-Type-Options':'nosniff'
     });
     try {
-      return Response.json(await api(req,headers,url,env),{headers});
+      return Response.json(await api(req,headers,url,env,context),{headers});
     } catch (error) {
       if (!error.status) console.error('FixIt request failed',error.message);
       return Response.json({error:error.status ? error.code : 'unexpected'},

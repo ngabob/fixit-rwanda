@@ -19,20 +19,19 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000) in Edge. Keep PowerShell ope
 
 Use the password **FixIt-Demo-24** for each demo account.
 
-1. Sign in as **customer@example.test**. Choose **Find a pro**, pick **Plumbing** and **Gasabo**, open **Mugisha Home Plumbing**, and request a quote for a test repair.
-2. Sign out and sign in as **plumbing@example.test**. Open the incoming request and send a quote, such as **15000 RWF**, with a short description of the work included.
-3. Sign in as the customer again. Open **Dashboard** and accept the quote.
-4. Sign in as **admin@example.test**. Check the request and hide a demo profile. Return to search to check visibility. Restore the profile from the admin dashboard.
-5. Switch to **Kinyarwanda**, then try **Join as a professional** to create a test account and list a service. The language switch translates the interface. Names and text entered by users stay in their original language.
+1. Choose **Find a pro**, pick **Plumbing** and **Gasabo**, and open **Mugisha Home Plumbing**. Send a test quote request with fictional contact and job details.
+2. Sign in as **plumbing@example.test**. Open **Requests from guests** in the dashboard. You can see the customer's details and contact them directly.
+3. Sign in as **admin@example.test**. Check the request and hide a demo profile. Return to search to check visibility, then restore the profile from the admin dashboard.
+4. Switch to **Kinyarwanda**, then try **Join as a professional** to create a test account and list a service. The language switch translates the interface. Names and text entered by users stay in their original language.
 
-The demo command adds fictional profiles and local accounts to `data/fixit.sqlite`. Restarting keeps your test work. Each request goes to one professional and can receive one quote. The first release covers Gasabo, Kicukiro, and Nyarugenge.
+The demo command adds fictional profiles and local accounts to `data/fixit.sqlite`. Restarting keeps your test work. Each request goes to one professional. Guest customers receive quotes directly from that professional. The first release covers Gasabo, Kicukiro, and Nyarugenge.
 
 ## 3. Make your first code change
 
 1. Open `public/app.js` in a text editor. Find `heroEnd` and edit the English and Kinyarwanda versions.
 2. Save and refresh Edge. The headline should change in both languages.
 3. Open `public/styles.css` and change `--lime` near the top to try a different accent color. Save and refresh.
-4. Follow the request through the code. The form in `public/app.js` submits to `POST /api/jobs` in `server.js`. The server checks the signed-in role, saves the request in SQLite, and shows it on the professional’s dashboard.
+4. Follow the request through the code. The form in `public/app.js` submits to `POST /api/guest-requests` in `server.js`. The server checks the signed-in role, saves the request in SQLite, and shows it on the professional’s dashboard.
 
 This build serves your own computer. The sample credentials and data are intended for local practice.
 
@@ -56,7 +55,17 @@ Start with a Cloudflare account on the Workers Free plan. This deployment uses W
    ```
 
    Refresh the dashboard. The session reads the account role from the database.
-5. Verify the live workflow with separate test customer and professional accounts. Send a request, send a quote, accept it, and check the admin dashboard. Use fictional job details for this test.
+5. Verify the live workflow with separate test customer and professional accounts. Send a guest request and check the professional and admin dashboards. Use fictional job details for this test.
 6. Commit the database ID with the Cloudflare configuration and push the project to your private GitHub repository. In the Worker settings, connect the GitHub repository under **Builds**. Use `npx wrangler deploy` as the deploy command. Apply any future database migrations before deploying code that depends on them.
 
 The database ID is a resource identifier. Keep credentials, local databases, and backups out of GitHub.
+
+## Enable quote-request alerts in Cloudflare
+
+New requests appear in the selected professional’s dashboard even while email and SMS are unconfigured. The admin dashboard shows whether each provider accepted the alert. Provider acceptance does not confirm delivery to an inbox or handset.
+
+- **Email** uses Resend. Verify a domain you own in Resend and choose a sender address on it. Add `RESEND_API_KEY` and `QUOTE_EMAIL_FROM` in the Worker’s **Settings → Variables and Secrets**. Email includes the customer’s name, callback number, optional email, and job details.
+- **SMS** uses Africa’s Talking. Set up a live Rwanda app, obtain an approved sender ID, and check rates and wallet requirements. Add `AT_API_KEY`, `AT_USERNAME`, and `AT_SENDER_ID` in the Worker’s **Settings → Variables and Secrets**. Professionals enable text alerts themselves in their profile with a Rwanda mobile number. The SMS includes the customer’s callback number and a link to the signed-in dashboard for the full request.
+- Once configured, send a new test request to a professional who has opted in and confirm it reaches both their email and phone. Prior requests remain in the dashboard. The app sends alerts once per newly saved request.
+
+Store API keys as encrypted Worker secrets. The local Node demo only saves requests in SQLite.
