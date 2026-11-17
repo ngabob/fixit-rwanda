@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: fixit-rwanda
+    runtime: node
+    plan: starter
+    buildCommand: node --check server.js && node --check public/app.js
+    startCommand: node server.js
+    healthCheckPath: /
+    disk:
+      name: fixit-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: FIXIT_DATA_DIR
+        value: /var/data
+      - key: FIXIT_ADMIN_EMAIL
+        sync: false
+      - key: FIXIT_ADMIN_PASSWORD
+        sync: false
