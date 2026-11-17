@@ -98,6 +98,7 @@ export const serviceGroups = [
   ]]
 ];
 
-export const serviceNames = new Map(serviceGroups.flatMap(([, , services]) =>
-  services.map(([id, en, rw]) => [id, { en, rw }])
-));
+export const serviceNames = new Map();
+for (const [, , services] of serviceGroups) {
+  for (const [id, en, rw] of services) serviceNames.set(id, { en, rw });
+}

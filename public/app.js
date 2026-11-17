@@ -1,7 +1,8 @@
-import { serviceGroups, serviceNames } from './services.js';
+import { serviceGroups, serviceNames } from './services.js?v=20261117';
 
 const copy = {
   en: {
+    connectionError:'FixIt Rwanda couldn’t connect. Check your connection and try again.', retry:'Try again',
     rights:'All rights reserved.', browse:'Find a pro', signIn:'Sign in', join:'Create account', logout:'Sign out', dashboard:'Dashboard',
     location:'Kigali, Rwanda', hero:'Good work starts', heroEnd:'close to home.', intro:'Find a local professional for repairs, maintenance, and projects around your home.',
     service:'Service', district:'District', allServices:'All services', allDistricts:'All districts',
@@ -29,6 +30,7 @@ const copy = {
     registerPro:'Join as a professional', mine:'My requests', received:'Incoming requests', loading:'Loading…'
   },
   rw: {
+    connectionError:'FixIt Rwanda ntiyashoboye gufunguka. Reba niba ufite interineti wongere ugerageze.', retry:'Ongera ugerageze',
     rights:'Uburenganzira bwose burabitswe.', browse:'Shaka umunyamwuga', signIn:'Injira', join:'Fungura konti', logout:'Sohoka', dashboard:'Imbonerahamwe',
     location:'Kigali, u Rwanda', hero:'Serivisi nziza ziboneka', heroEnd:'hafi yawe.', intro:'Shaka umunyamwuga uri hafi yawe wakora imirimo yo gusana, kubungabunga no gutunganya urugo.',
     service:'Serivisi', district:'Akarere', allServices:'Serivisi zose', allDistricts:'Uturere twose',
@@ -58,16 +60,24 @@ const copy = {
 };
 const featuredServices = { plumbing:'◉', electrical:'ϟ', painting:'▧', cleaning:'✧', carpentry:'◇', appliances:'▣' };
 const districts = ['Gasabo','Kicukiro','Nyarugenge'];
-let language = localStorage.getItem('fixit-language') === 'rw' ? 'rw' : 'en';
+let language = 'en';
+try {
+  if (localStorage.getItem('fixit-language') === 'rw') language = 'rw';
+} catch {
+  // Language selection can still work when browser storage is blocked.
+}
 let user = null;
 let filter = { category:'', district:'' };
 let viewVersion = 0;
 let message = '';
 const main = document.querySelector('main');
 const nav = document.querySelector('nav');
-const t = key => copy[language][key] || serviceNames.get(key)?.[language] || key;
+const t = key => {
+  const service = serviceNames.get(key);
+  return copy[language][key] || (service && service[language]) || key;
+};
 const escaped = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
-const e = value => String(value ?? '').replace(/[&<>"']/g, character => escaped[character]);
+const e = value => String(value == null ? '' : value).replace(/[&<>"']/g, character => escaped[character]);
 const label = (key, control) => '<label>' + t(key) + control + '</label>';
 const link = (to, key, style = '') => '<a class="' + style + '" href="#' + to + '">' + t(key) + '</a>';
 const button = (key, style = '') => '<button class="button ' + style + '">' + t(key) + '</button>';
@@ -77,12 +87,37 @@ const profileName = p => e(p.name);
 const bio = p => p.sample && p.bio === 'Sample profile for practicing the quote workflow.' ? t('sampleBio') : e(p.bio);
 
 async function api(path, data) {
-  const response = await fetch('/api/' + path, data === undefined ? {} : {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const options = data === undefined ? {} : {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
-  });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error);
+  };
+  if (controller) options.signal = controller.signal;
+  const timer = controller ? setTimeout(() => controller.abort(),15000) : null;
+  let response;
+  let result;
+  try {
+    response = await fetch('/api/' + path, options);
+    result = await response.json();
+  } catch {
+    throw new Error('connectionError');
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response.ok) throw new Error(result.error || 'unexpected');
   return result;
+}
+function formValues(form) {
+  const values = Object.create(null);
+  new FormData(form).forEach((value, key) => { values[key] = value; });
+  return values;
+}
+function newRequestId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = Array.from(bytes, byte => ('0' + byte.toString(16)).slice(-2)).join('');
+  return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
 }
 function page(title, contents, narrow = false) {
   return '<section class="wrap page ' + (narrow ? 'narrow' : '') + '"><h1 tabindex="-1">' +
@@ -168,7 +203,7 @@ function home(profiles) {
   };
   const search = document.querySelector('#search');
   function apply() {
-    filter = Object.fromEntries(new FormData(search));
+    filter = formValues(search);
     history.replaceState(null, '', filter.category ? '#service/' + filter.category : '#home');
     updateResults(profiles);
     document.querySelector('#professionals').focus();
@@ -207,7 +242,7 @@ function auth(register, proSignup) {
 function professional(p) {
   const action = form('guest-requests',
     '<input type="hidden" name="proId" value="' + p.id + '">' +
-    '<input type="hidden" name="requestId" value="' + crypto.randomUUID() + '">' +
+    '<input type="hidden" name="requestId" value="' + newRequestId() + '">' +
     label('guestName','<input required name="customer" autocomplete="name" minlength="2" maxlength="80">') +
     phoneField() +
     label('optionalEmail','<input type="email" name="email" autocomplete="email" maxlength="254">') +
@@ -260,8 +295,10 @@ function dashboard(data) {
   if (user.role === 'admin') {
     heading = 'jobs';
     panels = '<section class="panel stack"><h2>' + t('accounts') + '</h2><div class="line">' +
-      ['customer','pro','admin'].map(role => '<span>' + t(role) + ' <strong>' +
-        (data.accounts.find(entry => entry.role === role)?.total || 0) + '</strong></span>').join('') +
+      ['customer','pro','admin'].map(role => {
+        const account = data.accounts.find(entry => entry.role === role);
+        return '<span>' + t(role) + ' <strong>' + (account ? account.total : 0) + '</strong></span>';
+      }).join('') +
       '</div></section><section class="panel stack"><h2>' + t('addPro') + '</h2>' +
       form('admin/professionals', label('name',field('name','text',2,80)) +
         label('email',field('email','email',3,254)) +
@@ -280,7 +317,7 @@ function dashboard(data) {
   }
   main.innerHTML = page(user.role === 'admin' ? 'adminTitle' : 'dashboard','<div class="stack">' +
     (message ? '<p class="success" role="status">' + t(message) + '</p>' : '') +
-    panels + (data.guestRequests?.length ? '<h2>' + t('guestRequests') + '</h2>' +
+    panels + (data.guestRequests && data.guestRequests.length ? '<h2>' + t('guestRequests') + '</h2>' +
       data.guestRequests.map(guestCard).join('') : '') + '<h2>' + t(heading) + '</h2>' + jobs + '</div>',user.role !== 'admin');
   message = '';
 }
@@ -315,7 +352,11 @@ async function render() {
   };
   nav.querySelector('#language').onclick = () => {
     language = language === 'en' ? 'rw' : 'en';
-    localStorage.setItem('fixit-language',language);
+    try {
+      localStorage.setItem('fixit-language',language);
+    } catch {
+      // Keep the selected language for this visit.
+    }
     render();
   };
   const logout = nav.querySelector('#logout');
@@ -352,7 +393,10 @@ async function render() {
       }
     }
   } catch (error) {
-    if (version === viewVersion) main.innerHTML = page(error.message,link('home','back'),true);
+    if (version === viewVersion) {
+      main.innerHTML = page(error.message,'<button type="button" id="retry" class="button">' + t('retry') + '</button>',true);
+      main.querySelector('#retry').onclick = () => location.reload();
+    }
   }
 }
 function navigate(route) {
@@ -367,7 +411,7 @@ main.addEventListener('submit',async event => {
   if (action === 'admin/delete-professional' && !window.confirm(t('confirmDeletePro'))) return;
   const submit = form.querySelector('button');
   const errorBox = form.querySelector('.feedback');
-  const data = Object.fromEntries(new FormData(form));
+  const data = formValues(form);
   if (action === 'profile') data.smsOptIn = form.elements.smsOptIn.checked;
   if (action === 'moderate') data.visible = data.visible === 'true';
   submit.disabled = true;
@@ -409,8 +453,13 @@ document.addEventListener('keydown',event => {
   }
 });
 window.addEventListener('hashchange',() => { window.scrollTo(0,0); render(); });
-try {
-  ({ user } = await api('me'));
-} finally {
-  render();
+async function start() {
+  try {
+    const session = await api('me');
+    user = session.user;
+  } catch {
+    // The public marketplace remains available if the session check fails.
+  }
+  await render();
 }
+start();
