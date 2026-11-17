@@ -59,11 +59,23 @@ function credentials(body) {
   }
   return { email, password: body.password };
 }
+function contactPhone(value) {
+  if (value === undefined || value === '') return null;
+  if (typeof value !== 'string' || value.length > 30) fail(400, 'invalidPhone');
+  const text = value.trim();
+  if (!text) return null;
+  const normalized = text.replace(/[\s().-]/g, '');
+  if (!/^\+?[0-9]{7,15}$/.test(normalized)) fail(400, 'invalidPhone');
+  return normalized;
+}
 function profileFields(body) {
   if (!categories.includes(body.category) || !districts.includes(body.district)) fail(400, 'invalid');
   return [body.category, body.district, field(body, 'bio', 10, 500)];
 }
-const profileQuery = 'SELECT p.*, u.name FROM profiles p JOIN users u ON u.id=p.id';
+const profileFieldsSql = 'p.id, p.category, p.district, p.bio, p.visible, p.sample, u.name';
+const profileSource = ' FROM profiles p JOIN users u ON u.id=p.id';
+const profileQuery = 'SELECT ' + profileFieldsSql + profileSource;
+const adminProfileQuery = 'SELECT ' + profileFieldsSql + ', p.phone' + profileSource;
 const jobQuery = `SELECT j.*, customer.name AS customer, pro.name AS professional,
   q.amount, q.note FROM jobs j JOIN users customer ON customer.id=j.customer_id
   JOIN users pro ON pro.id=j.pro_id LEFT JOIN quotes q ON q.job_id=j.id`;
@@ -114,14 +126,15 @@ async function api(req, headers, url, env) {
     const role = managed ? 'pro' : body.role;
     if (!['customer', 'pro'].includes(role)) fail(400, 'invalid');
     const profile = role === 'pro' ? profileFields(body) : null;
+    const phone = managed ? contactPhone(body.phone) : null;
     const hash = await passwordHash(password);
     const statements = [stmt(
       'INSERT INTO users(name,email,password,role) VALUES (?,?,?,?) ON CONFLICT(email) DO NOTHING',
       name,email,hash,role
     )];
     if (profile) statements.push(stmt(
-      'INSERT INTO profiles(id,category,district,bio) SELECT id,?,?,? FROM users WHERE email=? AND password=?',
-      ...profile, email, hash
+      'INSERT INTO profiles(id,category,district,bio,phone) SELECT id,?,?,?,? FROM users WHERE email=? AND password=?',
+      ...profile, phone, email, hash
     ));
     const [created] = await db.batch(statements);
     if (!created.meta.changes) fail(409,'emailTaken');
@@ -146,7 +159,7 @@ async function api(req, headers, url, env) {
   if (route === 'GET /api/dashboard') {
     requireRole();
     if (user.role === 'admin') return {
-      profiles: await select(profileQuery + " WHERE u.role='pro' ORDER BY u.name"),
+      profiles: await select(adminProfileQuery + " WHERE u.role='pro' ORDER BY u.name"),
       jobs: await select(jobQuery + ' ORDER BY j.id DESC'),
       accounts: await select("SELECT role, COUNT(*) AS total FROM users WHERE role<>'archived' GROUP BY role")
     };

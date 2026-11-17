@@ -42,6 +42,10 @@ db.exec(`
   );
 `);
 
+if (!db.prepare('PRAGMA table_info(profiles)').all().some(column => column.name === 'phone')) {
+  db.exec('ALTER TABLE profiles ADD COLUMN phone TEXT');
+}
+
 const categories = ['plumbing', 'electrical', 'painting', 'cleaning', 'carpentry', 'appliances'];
 const districts = ['Gasabo', 'Kicukiro', 'Nyarugenge'];
 const select = (sql, ...params) => db.prepare(sql).all(...params);
@@ -82,6 +86,15 @@ function credentials(body) {
     fail(400, 'invalid');
   }
   return { email, password: body.password };
+}
+function contactPhone(value) {
+  if (value === undefined || value === '') return null;
+  if (typeof value !== 'string' || value.length > 30) fail(400, 'invalidPhone');
+  const text = value.trim();
+  if (!text) return null;
+  const normalized = text.replace(/[\s().-]/g, '');
+  if (!/^\+?[0-9]{7,15}$/.test(normalized)) fail(400, 'invalidPhone');
+  return normalized;
 }
 function profileFields(body) {
   if (!categories.includes(body.category) || !districts.includes(body.district)) fail(400, 'invalid');
@@ -141,7 +154,7 @@ if (demo) {
       const email = category + '@example.test';
       if (one('SELECT id FROM users WHERE email=?', email)) continue;
       const id = addUser(name, email, 'FixIt-Demo-24', 'pro');
-      run('INSERT INTO profiles VALUES (?,?,?,?,1,1)', id, category, district,
+      run('INSERT INTO profiles(id,category,district,bio,visible,sample) VALUES (?,?,?,?,1,1)', id, category, district,
         'Sample profile for practicing the quote workflow.');
     }
     for (const [name, email, role] of [
@@ -153,7 +166,10 @@ if (demo) {
   });
 }
 
-const profileQuery = 'SELECT p.*, u.name FROM profiles p JOIN users u ON u.id=p.id';
+const profileFieldsSql = 'p.id, p.category, p.district, p.bio, p.visible, p.sample, u.name';
+const profileSource = ' FROM profiles p JOIN users u ON u.id=p.id';
+const profileQuery = 'SELECT ' + profileFieldsSql + profileSource;
+const adminProfileQuery = 'SELECT ' + profileFieldsSql + ', p.phone' + profileSource;
 const jobQuery = `SELECT j.*, customer.name AS customer, pro.name AS professional,
   q.amount, q.note FROM jobs j JOIN users customer ON customer.id=j.customer_id
   JOIN users pro ON pro.id=j.pro_id LEFT JOIN quotes q ON q.job_id=j.id`;
@@ -182,10 +198,11 @@ async function api(req, res, url) {
     const role = managed ? 'pro' : body.role;
     if (!['customer', 'pro'].includes(role)) fail(400, 'invalid');
     const profile = role === 'pro' ? profileFields(body) : null;
+    const phone = managed ? contactPhone(body.phone) : null;
     const id = transaction(() => {
       if (one('SELECT id FROM users WHERE email=?', email)) fail(409, 'emailTaken');
       const id = addUser(name, email, password, role);
-      if (profile) run('INSERT INTO profiles(id,category,district,bio) VALUES (?,?,?,?)', id, ...profile);
+      if (profile) run('INSERT INTO profiles(id,category,district,bio,phone) VALUES (?,?,?,?,?)', id, ...profile, phone);
       return id;
     });
     if (managed) return {};
@@ -207,7 +224,7 @@ async function api(req, res, url) {
   if (route === 'GET /api/dashboard') {
     requireRole();
     if (user.role === 'admin') return {
-      profiles: select(profileQuery + " WHERE u.role='pro' ORDER BY u.name"),
+      profiles: select(adminProfileQuery + " WHERE u.role='pro' ORDER BY u.name"),
       jobs: select(jobQuery + ' ORDER BY j.id DESC'),
       accounts: select("SELECT role, COUNT(*) AS total FROM users WHERE role<>'archived' GROUP BY role")
     };

@@ -15,6 +15,7 @@ const copy = {
     badLogin:'Check your email and password.', emailTaken:'An account already uses that email.', invalid:'Check the form fields and try again.',
     forbidden:'Your account cannot perform this action.', loginNeeded:'Sign in to continue.', closed:'This request is no longer available for that action.',
     tryLater:'Too many attempts. Wait a minute and try again.', unexpected:'Something went wrong. Try again.', saved:'Saved.', signupHint:'Choose how you’ll use FixIt Rwanda.',
+    phoneOptional:'Phone number (optional)', phone:'Phone number', invalidPhone:'Enter a valid phone number with 7 to 15 digits.',
     addPro:'Add professional', deletePro:'Delete professional', proPassword:'Initial password (at least 8 characters)',
     confirmDeletePro:'Delete this professional? Their listing and sign-in will be removed. Existing jobs and quotes will stay in your records.',
     registerPro:'Join as a professional', mine:'My requests', received:'Incoming requests', loading:'Loading…',
@@ -36,6 +37,7 @@ const copy = {
     badLogin:'Reba niba imeyili n’ijambobanga ari byo.', emailTaken:'Iyo meyili isanzwe ikoreshwa.', invalid:'Reba ibyo wujuje wongere ugerageze.',
     forbidden:'Konti yawe ntiyemerewe gukora iki gikorwa.', loginNeeded:'Injira kugira ngo ukomeze.', closed:'Iki gikorwa ntigishoboka kuri ubu busabe.',
     tryLater:'Wagerageje inshuro nyinshi. Tegereza umunota umwe wongere ugerageze.', unexpected:'Habaye ikibazo. Ongera ugerageze.', saved:'Byabitswe.', signupHint:'Hitamo uko uzakoresha FixIt Rwanda.',
+    phoneOptional:'Nimero ya telefoni (si ngombwa)', phone:'Nimero ya telefoni', invalidPhone:'Andika nimero ya telefoni igizwe n’imibare 7 kugeza kuri 15.',
     addPro:'Ongeramo umunyamwuga', deletePro:'Siba umunyamwuga', proPassword:'Ijambobanga ry’ibanze (inyuguti nibura 8)',
     confirmDeletePro:'Urashaka gusiba uyu munyamwuga? Umwirondoro we uzavanwa ku rubuga kandi ntazongera kwinjira. Ubusabe n’ibiciro bizaguma mu nyandiko.',
     registerPro:'Iyandikishe nk’umunyamwuga', mine:'Ubusabe bwanjye', received:'Ubusabe nakiriye', loading:'Tegereza…',
@@ -218,10 +220,13 @@ function dashboard(data) {
       '</div></section><section class="panel stack"><h2>' + t('addPro') + '</h2>' +
       form('admin/professionals', label('name',field('name','text',2,80)) +
         label('email',field('email','email',3,254)) +
+        label('phoneOptional','<input type="tel" name="phone" autocomplete="tel" maxlength="30">') +
         label('proPassword','<input required type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128">') +
         profileFields(),'addPro') +
       '</section><section class="panel stack"><h2>' + t('profiles') + '</h2>' +
-      data.profiles.map(p => '<div class="line">' + profileLine(p) + '<span class="tag">' +
+      data.profiles.map(p => '<div class="line">' + profileLine(p) +
+        (p.phone ? '<small>' + t('phone') + ' · <a href="tel:' + e(p.phone) + '">' + e(p.phone) + '</a></small>' : '') +
+        '<span class="tag">' +
         t(p.visible ? 'visible' : 'hidden') + '</span>' + form('moderate',
         '<input type="hidden" name="id" value="' + p.id + '"><input type="hidden" name="visible" value="' +
         (p.visible ? 'false' : 'true') + '">',p.visible ? 'hide' : 'show') +
