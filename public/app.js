@@ -15,6 +15,8 @@ const copy = {
     badLogin:'Check your email and password.', emailTaken:'An account already uses that email.', invalid:'Check the form fields and try again.',
     forbidden:'Your account cannot perform this action.', loginNeeded:'Sign in to continue.', closed:'This request is no longer available for that action.',
     tryLater:'Too many attempts. Wait a minute and try again.', unexpected:'Something went wrong. Try again.', saved:'Saved.', signupHint:'Choose how you’ll use FixIt Rwanda.',
+    addPro:'Add professional', deletePro:'Delete professional', proPassword:'Initial password (at least 8 characters)',
+    confirmDeletePro:'Delete this professional? Their listing and sign-in will be removed. Existing jobs and quotes will stay in your records.',
     registerPro:'Join as a professional', mine:'My requests', received:'Incoming requests', loading:'Loading…',
     plumbing:'Plumbing', electrical:'Electrical', painting:'Painting', cleaning:'Cleaning', carpentry:'Carpentry', appliances:'Appliance repair'
   },
@@ -34,6 +36,8 @@ const copy = {
     badLogin:'Reba niba imeyili n’ijambobanga ari byo.', emailTaken:'Iyo meyili isanzwe ikoreshwa.', invalid:'Reba ibyo wujuje wongere ugerageze.',
     forbidden:'Konti yawe ntiyemerewe gukora iki gikorwa.', loginNeeded:'Injira kugira ngo ukomeze.', closed:'Iki gikorwa ntigishoboka kuri ubu busabe.',
     tryLater:'Wagerageje inshuro nyinshi. Tegereza umunota umwe wongere ugerageze.', unexpected:'Habaye ikibazo. Ongera ugerageze.', saved:'Byabitswe.', signupHint:'Hitamo uko uzakoresha FixIt Rwanda.',
+    addPro:'Ongeramo umunyamwuga', deletePro:'Siba umunyamwuga', proPassword:'Ijambobanga ry’ibanze (inyuguti nibura 8)',
+    confirmDeletePro:'Urashaka gusiba uyu munyamwuga? Umwirondoro we uzavanwa ku rubuga kandi ntazongera kwinjira. Ubusabe n’ibiciro bizaguma mu nyandiko.',
     registerPro:'Iyandikishe nk’umunyamwuga', mine:'Ubusabe bwanjye', received:'Ubusabe nakiriye', loading:'Tegereza…',
     plumbing:'Gusana imiyoboro y’amazi', electrical:'Amashanyarazi', painting:'Gusiga amarangi', cleaning:'Isuku', carpentry:'Ububaji', appliances:'Gusana ibikoresho byo mu rugo'
   }
@@ -211,11 +215,18 @@ function dashboard(data) {
     panels = '<section class="panel stack"><h2>' + t('accounts') + '</h2><div class="line">' +
       ['customer','pro','admin'].map(role => '<span>' + t(role) + ' <strong>' +
         (data.accounts.find(entry => entry.role === role)?.total || 0) + '</strong></span>').join('') +
-      '</div></section><section class="panel stack"><h2>' + t('profiles') + '</h2>' +
+      '</div></section><section class="panel stack"><h2>' + t('addPro') + '</h2>' +
+      form('admin/professionals', label('name',field('name','text',2,80)) +
+        label('email',field('email','email',3,254)) +
+        label('proPassword','<input required type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128">') +
+        profileFields(),'addPro') +
+      '</section><section class="panel stack"><h2>' + t('profiles') + '</h2>' +
       data.profiles.map(p => '<div class="line">' + profileLine(p) + '<span class="tag">' +
         t(p.visible ? 'visible' : 'hidden') + '</span>' + form('moderate',
         '<input type="hidden" name="id" value="' + p.id + '"><input type="hidden" name="visible" value="' +
-        (p.visible ? 'false' : 'true') + '">',p.visible ? 'hide' : 'show') + '</div>').join('') + '</section>';
+        (p.visible ? 'false' : 'true') + '">',p.visible ? 'hide' : 'show') +
+        form('admin/delete-professional','<input type="hidden" name="id" value="' + p.id + '">','deletePro') +
+        '</div>').join('') + '</section>';
   }
   main.innerHTML = page(user.role === 'admin' ? 'adminTitle' : 'dashboard','<div class="stack">' +
     (message ? '<p class="success" role="status">' + t(message) + '</p>' : '') +
@@ -279,6 +290,7 @@ main.addEventListener('submit',async event => {
   const action = form.dataset.action;
   if (!action) return;
   event.preventDefault();
+  if (action === 'admin/delete-professional' && !window.confirm(t('confirmDeletePro'))) return;
   const submit = form.querySelector('button');
   const errorBox = form.querySelector('.feedback');
   const data = Object.fromEntries(new FormData(form));

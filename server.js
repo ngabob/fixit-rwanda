@@ -161,7 +161,7 @@ const jobQuery = `SELECT j.*, customer.name AS customer, pro.name AS professiona
 async function api(req, res, url) {
   const token = req.headers.cookie?.match(/(?:^|;\s*)fixit=([a-f0-9]{64})(?:;|$)/)?.[1];
   const user = token && one(`SELECT u.id,u.name,u.role FROM users u JOIN sessions s
-    ON s.user_id=u.id WHERE s.token=? AND s.expires>?`, tokenHash(token), Date.now());
+    ON s.user_id=u.id WHERE s.token=? AND s.expires>? AND u.role<>'archived'`, tokenHash(token), Date.now());
   function requireRole(role) {
     if (!user) fail(401, 'loginNeeded');
     if (role && user.role !== role) fail(403, 'forbidden');
@@ -169,15 +169,17 @@ async function api(req, res, url) {
   const route = req.method + ' ' + url.pathname;
   if (route === 'GET /api/me') return { user: user || null };
   if (route === 'GET /api/profiles') {
-    return select(profileQuery + ' WHERE p.visible=1 ORDER BY p.sample, u.name');
+    return select(profileQuery + " WHERE p.visible=1 AND u.role='pro' ORDER BY p.sample, u.name");
   }
   if (req.method === 'POST' && req.headers.origin &&
       req.headers.origin !== (publicOrigin || 'http://' + req.headers.host)) fail(403, 'forbidden');
-  if (route === 'POST /api/register') {
+  if (route === 'POST /api/register' || route === 'POST /api/admin/professionals') {
+    const managed = route === 'POST /api/admin/professionals';
+    if (managed) requireRole('admin');
     const body = await readBody(req);
     const { email, password } = credentials(body);
     const name = field(body, 'name', 2, 80);
-    const { role } = body;
+    const role = managed ? 'pro' : body.role;
     if (!['customer', 'pro'].includes(role)) fail(400, 'invalid');
     const profile = role === 'pro' ? profileFields(body) : null;
     const id = transaction(() => {
@@ -186,13 +188,14 @@ async function api(req, res, url) {
       if (profile) run('INSERT INTO profiles(id,category,district,bio) VALUES (?,?,?,?)', id, ...profile);
       return id;
     });
+    if (managed) return {};
     startSession(res, id, token);
     return { user: { id, name, role } };
   }
   if (route === 'POST /api/login') {
     const { email, password } = credentials(await readBody(req));
     const account = one('SELECT * FROM users WHERE email=?', email);
-    if (!account || !matches(password, account.password)) fail(401, 'badLogin');
+    if (!account || account.role === 'archived' || !matches(password, account.password)) fail(401, 'badLogin');
     startSession(res, account.id, token);
     return { user: { id: account.id, name: account.name, role: account.role } };
   }
@@ -204,9 +207,9 @@ async function api(req, res, url) {
   if (route === 'GET /api/dashboard') {
     requireRole();
     if (user.role === 'admin') return {
-      profiles: select(profileQuery + ' ORDER BY u.name'),
+      profiles: select(profileQuery + " WHERE u.role='pro' ORDER BY u.name"),
       jobs: select(jobQuery + ' ORDER BY j.id DESC'),
-      accounts: select('SELECT role, COUNT(*) AS total FROM users GROUP BY role')
+      accounts: select("SELECT role, COUNT(*) AS total FROM users WHERE role<>'archived' GROUP BY role")
     };
     const column = user.role === 'pro' ? 'pro_id' : 'customer_id';
     return {
@@ -225,7 +228,7 @@ async function api(req, res, url) {
     const body = await readBody(req);
     const title = field(body, 'title', 4, 100);
     const details = field(body, 'details', 10, 1000);
-    const pro = one('SELECT * FROM profiles WHERE id=? AND visible=1', Number(body.proId));
+    const pro = one("SELECT p.* FROM profiles p JOIN users u ON u.id=p.id WHERE p.id=? AND p.visible=1 AND u.role='pro'", Number(body.proId));
     if (!pro) fail(404, 'missing');
     run('INSERT INTO jobs(customer_id,pro_id,category,district,title,details) VALUES (?,?,?,?,?,?)',
       user.id, pro.id, pro.category, pro.district, title, details);
@@ -254,11 +257,22 @@ async function api(req, res, url) {
     if (!result.changes) fail(409, 'closed');
     return {};
   }
+  if (route === 'POST /api/admin/delete-professional') {
+    requireRole('admin');
+    const id = Number((await readBody(req)).id);
+    if (!Number.isSafeInteger(id) || id < 1) fail(400, 'invalid');
+    transaction(() => {
+      const result = run("UPDATE users SET role='archived', password='' WHERE id=? AND role='pro'", id);
+      if (!result.changes) fail(404, 'missing');
+      run('DELETE FROM sessions WHERE user_id=?', id);
+    });
+    return {};
+  }
   if (route === 'POST /api/moderate') {
     requireRole('admin');
     const body = await readBody(req);
     if (typeof body.visible !== 'boolean') fail(400, 'invalid');
-    if (!run('UPDATE profiles SET visible=? WHERE id=?', Number(body.visible), Number(body.id)).changes) {
+    if (!run("UPDATE profiles SET visible=? WHERE id=? AND id IN (SELECT id FROM users WHERE role='pro')", Number(body.visible), Number(body.id)).changes) {
       fail(404, 'missing');
     }
     return {};

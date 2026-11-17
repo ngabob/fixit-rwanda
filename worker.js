@@ -77,7 +77,7 @@ async function api(req, headers, url, env) {
   const run = async (sql,...params) => (await stmt(sql,...params).run()).meta;
   const token = req.headers.get('Cookie')?.match(/(?:^|;\s*)fixit=([a-f0-9]{64})(?:;|$)/)?.[1];
   const user = token && await one(`SELECT u.id,u.name,u.role FROM users u JOIN sessions s
-    ON s.user_id=u.id WHERE s.token=? AND s.expires>?`, await tokenHash(token),Date.now());
+    ON s.user_id=u.id WHERE s.token=? AND s.expires>? AND u.role<>'archived'`, await tokenHash(token),Date.now());
   async function limit(key) {
     if (!(await env.AUTH_LIMIT.limit({key})).success) fail(429,'tryLater');
   }
@@ -102,14 +102,16 @@ async function api(req, headers, url, env) {
   const route = req.method + ' ' + url.pathname;
   if (route === 'GET /api/me') return { user: user || null };
   if (route === 'GET /api/profiles') {
-    return await select(profileQuery + ' WHERE p.visible=1 ORDER BY p.sample, u.name');
+    return await select(profileQuery + " WHERE p.visible=1 AND u.role='pro' ORDER BY p.sample, u.name");
   }
   if (req.method === 'POST' && req.headers.get('Origin') !== url.origin) fail(403, 'forbidden');
-  if (route === 'POST /api/register') {
+  if (route === 'POST /api/register' || route === 'POST /api/admin/professionals') {
+    const managed = route === 'POST /api/admin/professionals';
+    if (managed) requireRole('admin');
     const body = await readBody(req);
     const { email, password } = credentials(body);
     const name = field(body, 'name', 2, 80);
-    const { role } = body;
+    const role = managed ? 'pro' : body.role;
     if (!['customer', 'pro'].includes(role)) fail(400, 'invalid');
     const profile = role === 'pro' ? profileFields(body) : null;
     const hash = await passwordHash(password);
@@ -124,6 +126,7 @@ async function api(req, headers, url, env) {
     const [created] = await db.batch(statements);
     if (!created.meta.changes) fail(409,'emailTaken');
     const id = created.meta.last_row_id;
+    if (managed) return {};
     await startSession(id);
     return { user: { id, name, role } };
   }
@@ -131,7 +134,7 @@ async function api(req, headers, url, env) {
     const { email, password } = credentials(await readBody(req));
     await limit('login:' + email);
     const account = await one('SELECT * FROM users WHERE email=?', email);
-    if (!account || !(await matches(password, account.password))) fail(401, 'badLogin');
+    if (!account || account.role === 'archived' || !(await matches(password, account.password))) fail(401, 'badLogin');
     await startSession(account.id);
     return { user: { id: account.id, name: account.name, role: account.role } };
   }
@@ -143,9 +146,9 @@ async function api(req, headers, url, env) {
   if (route === 'GET /api/dashboard') {
     requireRole();
     if (user.role === 'admin') return {
-      profiles: await select(profileQuery + ' ORDER BY u.name'),
+      profiles: await select(profileQuery + " WHERE u.role='pro' ORDER BY u.name"),
       jobs: await select(jobQuery + ' ORDER BY j.id DESC'),
-      accounts: await select('SELECT role, COUNT(*) AS total FROM users GROUP BY role')
+      accounts: await select("SELECT role, COUNT(*) AS total FROM users WHERE role<>'archived' GROUP BY role")
     };
     const column = user.role === 'pro' ? 'pro_id' : 'customer_id';
     return {
@@ -166,7 +169,8 @@ async function api(req, headers, url, env) {
     const details = field(body, 'details', 10, 1000);
     const created = await run(
       'INSERT INTO jobs(customer_id,pro_id,category,district,title,details) ' +
-      'SELECT ?,id,category,district,?,? FROM profiles WHERE id=? AND visible=1',
+      "SELECT ?,p.id,p.category,p.district,?,? FROM profiles p JOIN users u ON u.id=p.id " +
+      "WHERE p.id=? AND p.visible=1 AND u.role='pro'",
       user.id,title,details,idField(body.proId)
     );
     if (!created.changes) fail(404,'missing');
@@ -197,11 +201,21 @@ async function api(req, headers, url, env) {
     if (!result.changes) fail(409, 'closed');
     return {};
   }
+  if (route === 'POST /api/admin/delete-professional') {
+    requireRole('admin');
+    const id = idField((await readBody(req)).id);
+    const [archived] = await db.batch([
+      stmt("UPDATE users SET role='archived', password='' WHERE id=? AND role='pro'", id),
+      stmt("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE id=? AND role='archived')", id)
+    ]);
+    if (!archived.meta.changes) fail(404, 'missing');
+    return {};
+  }
   if (route === 'POST /api/moderate') {
     requireRole('admin');
     const body = await readBody(req);
     if (typeof body.visible !== 'boolean') fail(400, 'invalid');
-    if (!(await run('UPDATE profiles SET visible=? WHERE id=?', Number(body.visible), idField(body.id))).changes) {
+    if (!(await run("UPDATE profiles SET visible=? WHERE id=? AND id IN (SELECT id FROM users WHERE role='pro')", Number(body.visible), idField(body.id))).changes) {
       fail(404, 'missing');
     }
     return {};
