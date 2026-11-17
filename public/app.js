@@ -2,7 +2,7 @@ import { serviceGroups, serviceNames } from './services.js';
 
 const copy = {
   en: {
-    browse:'Find a pro', signIn:'Sign in', join:'Create account', logout:'Sign out', dashboard:'Dashboard',
+    rights:'All rights reserved.', browse:'Find a pro', signIn:'Sign in', join:'Create account', logout:'Sign out', dashboard:'Dashboard',
     location:'Kigali, Rwanda', hero:'Good work starts', heroEnd:'close to home.', intro:'Find a local professional for repairs, maintenance, and projects around your home.',
     service:'Service', district:'District', allServices:'All services', allDistricts:'All districts',
     categories:'Explore services', results:'Local professionals', found:'Profiles found', empty:'No professionals match your search.',
@@ -29,7 +29,7 @@ const copy = {
     registerPro:'Join as a professional', mine:'My requests', received:'Incoming requests', loading:'Loading…'
   },
   rw: {
-    browse:'Shaka umunyamwuga', signIn:'Injira', join:'Fungura konti', logout:'Sohoka', dashboard:'Imbonerahamwe',
+    rights:'Uburenganzira bwose burabitswe.', browse:'Shaka umunyamwuga', signIn:'Injira', join:'Fungura konti', logout:'Sohoka', dashboard:'Imbonerahamwe',
     location:'Kigali, u Rwanda', hero:'Serivisi nziza ziboneka', heroEnd:'hafi yawe.', intro:'Shaka umunyamwuga uri hafi yawe wakora imirimo yo gusana, kubungabunga no gutunganya urugo.',
     service:'Serivisi', district:'Akarere', allServices:'Serivisi zose', allDistricts:'Uturere twose',
     categories:'Reba serivisi', results:'Abanyamwuga bo hafi yawe', found:'Abanyamwuga babonetse', empty:'Nta munyamwuga uhuye n’ibyo washakishije.',
@@ -298,6 +298,7 @@ async function render() {
   const version = ++viewVersion;
   document.documentElement.lang = language;
   document.querySelector('#footer-text').textContent = t('local');
+  document.querySelector('#copyright').textContent = '© 2026 FixIt Rwanda. ' + t('rights');
   nav.innerHTML = exploreMenu() + link('home','browse') +
     (user ? link('dashboard','dashboard') + '<button class="button quiet small" id="logout">' + t('logout') + '</button>'
       : link('register/pro','registerPro') + link('login','signIn','button small')) +

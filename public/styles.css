@@ -58,3 +58,5 @@ nav { position: relative; }
 
 .form .check-label { display: flex; align-items: center; gap: 8px; }
 .check-label input { width: auto; }
+
+.footer-meta { display: grid; gap: 4px; }
