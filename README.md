@@ -36,12 +36,27 @@ The demo command adds fictional profiles and local accounts to `data/fixit.sqlit
 
 This build serves your own computer. The sample credentials and data are intended for local practice.
 
-## Run online with Render
+## Run online on Cloudflare Workers Free
 
-1. Put the project source in a private GitHub repository. Leave the local `data/` directory out of the repository. It contains demo accounts, job records, and sessions.
-2. In Render, connect the GitHub repository and create a **Blueprint** using `render.yaml`. Review the paid service and disk charges before launching.
-3. Enter your admin email and a new password of at least 16 characters into Render’s environment settings. The app reads these values to create the first administrator. Keep them out of the repository and chat.
-4. After deployment, open the HTTPS URL shown in Render. Sign in as admin, then create fresh customer and professional accounts to verify a request and quote. The hosted database lives on the attached disk and starts empty apart from the administrator.
-5. On another laptop, open the same private GitHub repository in Codex. Ask for a change and merge the update into the deployed branch to trigger a redeploy.
+Start with a Cloudflare account on the Workers Free plan. This deployment uses Workers for the website and API, and D1 for persistent records. The online database starts empty. The laptop demo continues using its own database and sample accounts.
 
-The Blueprint is a single-instance pilot. Render can briefly interrupt the service during redeploys because the instance uses a persistent disk.
+1. In PowerShell in this folder, run `npx.cmd wrangler@latest login` and approve access in your browser. In the Cloudflare dashboard, set up your free `workers.dev` subdomain when prompted.
+2. Run `npx.cmd wrangler@latest d1 create fixit-rwanda`. Copy the returned database ID into the existing D1 entry in `wrangler.jsonc` as the `database_id` property. Keep only one `DB` binding. If Wrangler already added the ID, keep that value.
+3. Apply the schema and deploy:
+
+   ```powershell
+   npx.cmd wrangler@latest d1 migrations apply DB --remote
+   npx.cmd wrangler@latest deploy
+   ```
+
+4. Open the printed HTTPS URL. Register your administrator account as a customer and confirm you can sign in. In the Cloudflare dashboard, open the `fixit-rwanda` D1 database and its **Console**. Promote only the account you just created, using its exact lowercase email:
+
+   ```sql
+   UPDATE users SET role='admin' WHERE email='your-email@example.com' AND role='customer';
+   ```
+
+   Refresh the dashboard. The session reads the account role from the database.
+5. Verify the live workflow with separate test customer and professional accounts. Send a request, send a quote, accept it, and check the admin dashboard. Use fictional job details for this test.
+6. Commit the database ID with the Cloudflare configuration and push the project to your private GitHub repository. In the Worker settings, connect the GitHub repository under **Builds**. Use `npx wrangler deploy` as the deploy command. Apply any future database migrations before deploying code that depends on them.
+
+The database ID is a resource identifier. Keep credentials, local databases, and backups out of GitHub.

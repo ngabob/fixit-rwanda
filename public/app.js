@@ -14,7 +14,7 @@ const copy = {
     visible:'Visible', hidden:'Hidden', local:'Home services in Kigali', missing:'This item is unavailable.',
     badLogin:'Check your email and password.', emailTaken:'An account already uses that email.', invalid:'Check the form fields and try again.',
     forbidden:'Your account cannot perform this action.', loginNeeded:'Sign in to continue.', closed:'This request is no longer available for that action.',
-    unexpected:'Something went wrong. Try again.', saved:'Saved.', signupHint:'Choose how you’ll use FixIt Rwanda.',
+    tryLater:'Too many attempts. Wait a minute and try again.', unexpected:'Something went wrong. Try again.', saved:'Saved.', signupHint:'Choose how you’ll use FixIt Rwanda.',
     registerPro:'Join as a professional', mine:'My requests', received:'Incoming requests', loading:'Loading…',
     plumbing:'Plumbing', electrical:'Electrical', painting:'Painting', cleaning:'Cleaning', carpentry:'Carpentry', appliances:'Appliance repair'
   },
@@ -33,7 +33,7 @@ const copy = {
     visible:'Uraboneka', hidden:'Urahishwe', local:'Serivisi zo mu rugo i Kigali', missing:'Ibyo ushaka ntibiboneka.',
     badLogin:'Reba niba imeyili n’ijambobanga ari byo.', emailTaken:'Iyo meyili isanzwe ikoreshwa.', invalid:'Reba ibyo wujuje wongere ugerageze.',
     forbidden:'Konti yawe ntiyemerewe gukora iki gikorwa.', loginNeeded:'Injira kugira ngo ukomeze.', closed:'Iki gikorwa ntigishoboka kuri ubu busabe.',
-    unexpected:'Habaye ikibazo. Ongera ugerageze.', saved:'Byabitswe.', signupHint:'Hitamo uko uzakoresha FixIt Rwanda.',
+    tryLater:'Wagerageje inshuro nyinshi. Tegereza umunota umwe wongere ugerageze.', unexpected:'Habaye ikibazo. Ongera ugerageze.', saved:'Byabitswe.', signupHint:'Hitamo uko uzakoresha FixIt Rwanda.',
     registerPro:'Iyandikishe nk’umunyamwuga', mine:'Ubusabe bwanjye', received:'Ubusabe nakiriye', loading:'Tegereza…',
     plumbing:'Gusana imiyoboro y’amazi', electrical:'Amashanyarazi', painting:'Gusiga amarangi', cleaning:'Isuku', carpentry:'Ububaji', appliances:'Gusana ibikoresho byo mu rugo'
   }
