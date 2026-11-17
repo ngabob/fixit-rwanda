@@ -1,3 +1,5 @@
+import { serviceNames } from './public/services.js';
+
 const encoder = new TextEncoder();
 const cookieAttributes = '; Path=/; HttpOnly; SameSite=Strict; Secure';
 const hex = bytes => Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2,'0')).join('');
@@ -41,7 +43,6 @@ async function readBody(req) {
   fail(400,'invalid');
 }
 
-const categories = ['plumbing', 'electrical', 'painting', 'cleaning', 'carpentry', 'appliances'];
 const districts = ['Gasabo', 'Kicukiro', 'Nyarugenge'];
 function fail(status, code) {
   throw Object.assign(new Error(code), { status, code });
@@ -60,16 +61,14 @@ function credentials(body) {
   return { email, password: body.password };
 }
 function contactPhone(value) {
-  if (value === undefined || value === '') return null;
   if (typeof value !== 'string' || value.length > 30) fail(400, 'invalidPhone');
   const text = value.trim();
-  if (!text) return null;
   const normalized = text.replace(/[\s().-]/g, '');
   if (!/^\+?[0-9]{7,15}$/.test(normalized)) fail(400, 'invalidPhone');
   return normalized;
 }
 function profileFields(body) {
-  if (!categories.includes(body.category) || !districts.includes(body.district)) fail(400, 'invalid');
+  if (!serviceNames.has(body.category) || !districts.includes(body.district)) fail(400, 'invalid');
   return [body.category, body.district, field(body, 'bio', 10, 500)];
 }
 const profileFieldsSql = 'p.id, p.category, p.district, p.bio, p.visible, p.sample, u.name';

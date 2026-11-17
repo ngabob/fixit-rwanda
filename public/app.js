@@ -1,3 +1,5 @@
+import { serviceGroups, serviceNames } from './services.js';
+
 const copy = {
   en: {
     browse:'Find a pro', signIn:'Sign in', join:'Create account', logout:'Sign out', dashboard:'Dashboard',
@@ -15,11 +17,10 @@ const copy = {
     badLogin:'Check your email and password.', emailTaken:'An account already uses that email.', invalid:'Check the form fields and try again.',
     forbidden:'Your account cannot perform this action.', loginNeeded:'Sign in to continue.', closed:'This request is no longer available for that action.',
     tryLater:'Too many attempts. Wait a minute and try again.', unexpected:'Something went wrong. Try again.', saved:'Saved.', signupHint:'Choose how you’ll use FixIt Rwanda.',
-    phoneOptional:'Phone number (optional)', phone:'Phone number', invalidPhone:'Enter a valid phone number with 7 to 15 digits.',
+    explore:'Explore', phone:'Phone number', invalidPhone:'Enter a valid phone number with 7 to 15 digits.',
     addPro:'Add professional', deletePro:'Delete professional', proPassword:'Initial password (at least 8 characters)',
     confirmDeletePro:'Delete this professional? Their listing and sign-in will be removed. Existing jobs and quotes will stay in your records.',
-    registerPro:'Join as a professional', mine:'My requests', received:'Incoming requests', loading:'Loading…',
-    plumbing:'Plumbing', electrical:'Electrical', painting:'Painting', cleaning:'Cleaning', carpentry:'Carpentry', appliances:'Appliance repair'
+    registerPro:'Join as a professional', mine:'My requests', received:'Incoming requests', loading:'Loading…'
   },
   rw: {
     browse:'Shaka umunyamwuga', signIn:'Injira', join:'Fungura konti', logout:'Sohoka', dashboard:'Imbonerahamwe',
@@ -37,14 +38,13 @@ const copy = {
     badLogin:'Reba niba imeyili n’ijambobanga ari byo.', emailTaken:'Iyo meyili isanzwe ikoreshwa.', invalid:'Reba ibyo wujuje wongere ugerageze.',
     forbidden:'Konti yawe ntiyemerewe gukora iki gikorwa.', loginNeeded:'Injira kugira ngo ukomeze.', closed:'Iki gikorwa ntigishoboka kuri ubu busabe.',
     tryLater:'Wagerageje inshuro nyinshi. Tegereza umunota umwe wongere ugerageze.', unexpected:'Habaye ikibazo. Ongera ugerageze.', saved:'Byabitswe.', signupHint:'Hitamo uko uzakoresha FixIt Rwanda.',
-    phoneOptional:'Nimero ya telefoni (si ngombwa)', phone:'Nimero ya telefoni', invalidPhone:'Andika nimero ya telefoni igizwe n’imibare 7 kugeza kuri 15.',
+    explore:'Reba serivisi', phone:'Nimero ya telefoni', invalidPhone:'Andika nimero ya telefoni igizwe n’imibare 7 kugeza kuri 15.',
     addPro:'Ongeramo umunyamwuga', deletePro:'Siba umunyamwuga', proPassword:'Ijambobanga ry’ibanze (inyuguti nibura 8)',
     confirmDeletePro:'Urashaka gusiba uyu munyamwuga? Umwirondoro we uzavanwa ku rubuga kandi ntazongera kwinjira. Ubusabe n’ibiciro bizaguma mu nyandiko.',
-    registerPro:'Iyandikishe nk’umunyamwuga', mine:'Ubusabe bwanjye', received:'Ubusabe nakiriye', loading:'Tegereza…',
-    plumbing:'Gusana imiyoboro y’amazi', electrical:'Amashanyarazi', painting:'Gusiga amarangi', cleaning:'Isuku', carpentry:'Ububaji', appliances:'Gusana ibikoresho byo mu rugo'
+    registerPro:'Iyandikishe nk’umunyamwuga', mine:'Ubusabe bwanjye', received:'Ubusabe nakiriye', loading:'Tegereza…'
   }
 };
-const services = { plumbing:'◉', electrical:'ϟ', painting:'▧', cleaning:'✧', carpentry:'◇', appliances:'▣' };
+const featuredServices = { plumbing:'◉', electrical:'ϟ', painting:'▧', cleaning:'✧', carpentry:'◇', appliances:'▣' };
 const districts = ['Gasabo','Kicukiro','Nyarugenge'];
 let language = localStorage.getItem('fixit-language') === 'rw' ? 'rw' : 'en';
 let user = null;
@@ -54,7 +54,7 @@ let message = '';
 let returnTo = '';
 const main = document.querySelector('main');
 const nav = document.querySelector('nav');
-const t = key => copy[language][key] || key;
+const t = key => copy[language][key] || serviceNames.get(key)?.[language] || key;
 const escaped = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
 const e = value => String(value ?? '').replace(/[&<>"']/g, character => escaped[character]);
 const label = (key, control) => '<label>' + t(key) + control + '</label>';
@@ -95,8 +95,15 @@ const feedback = '<p class="feedback" role="alert"></p>';
 function form(action, fields, submit, extra = '') {
   return '<form class="form" data-action="' + action + '" ' + extra + '>' + fields + feedback + button(submit) + '</form>';
 }
+function serviceSelector(selected, first) {
+  const groups = serviceGroups.map(([en, rw, services]) =>
+    '<optgroup label="' + e(language === 'rw' ? rw : en) + '">' +
+    options(services.map(([id]) => id), selected, null, true) + '</optgroup>'
+  ).join('');
+  return '<select name="category">' + options([], selected, first) + groups + '</select>';
+}
 function profileFields(p = {}) {
-  return label('service',selector('category',Object.keys(services),p.category,null,true)) +
+  return label('service',serviceSelector(p.category || 'plumbing')) +
     label('district',selector('district',districts,p.district)) +
     label('bio',textArea('bio',10,500,p.bio));
 }
@@ -116,6 +123,8 @@ function filtered(profiles) {
 }
 function updateResults(profiles) {
   const list = filtered(profiles);
+  document.querySelector('#professionals').textContent =
+    filter.category ? t(filter.category) : t('results');
   document.querySelector('#matches').textContent = t('found') + ' · ' + list.length;
   document.querySelector('#results').innerHTML = cards(list);
   for (const tile of document.querySelectorAll('[data-category]')) {
@@ -126,18 +135,26 @@ function home(profiles) {
   main.innerHTML = '<section class="hero"><div class="wrap hero-inner"><div class="hero-art" aria-hidden="true"><span>✦</span></div>' +
     '<div class="hero-copy"><span class="location">' + t('location') + '</span><h1>' + t('hero') + '<br><em>' + t('heroEnd') +
     '</em></h1><p>' + t('intro') + '</p></div><form class="search" id="search">' +
-    label('service',selector('category',Object.keys(services),filter.category,'allServices',true)) +
+    label('service',serviceSelector(filter.category,'allServices')) +
     label('district',selector('district',districts,filter.district,'allDistricts')) + button('browse','bright') +
     '</form></div></section><section class="wrap section"><div class="heading"><h2>' + t('categories') +
-    '</h2></div><div class="tiles">' + Object.entries(services).map(([key, icon]) =>
+    '</h2><button type="button" class="button quiet" id="all-services">' + t('allServices') +
+    '</button></div><div class="tiles">' + Object.entries(featuredServices).map(([key, icon]) =>
       '<button class="tile" type="button" data-category="' + key + '"><span class="tile-icon" aria-hidden="true">' +
       icon + '</span>' + t(key) + '</button>').join('') +
     '</div></section><section class="wrap section"><div class="heading"><h2 id="professionals" tabindex="-1">' +
     t('results') + '</h2><small id="matches" role="status"></small></div><div id="results"></div></section>';
   updateResults(profiles);
+  document.querySelector('#all-services').onclick = () => {
+    window.scrollTo(0,0);
+    const menu = nav.querySelector('.explore');
+    menu.open = true;
+    menu.querySelector('summary').focus();
+  };
   const search = document.querySelector('#search');
   function apply() {
     filter = Object.fromEntries(new FormData(search));
+    history.replaceState(null, '', filter.category ? '#service/' + filter.category : '#home');
     updateResults(profiles);
     document.querySelector('#professionals').focus();
   }
@@ -220,7 +237,7 @@ function dashboard(data) {
       '</div></section><section class="panel stack"><h2>' + t('addPro') + '</h2>' +
       form('admin/professionals', label('name',field('name','text',2,80)) +
         label('email',field('email','email',3,254)) +
-        label('phoneOptional','<input type="tel" name="phone" autocomplete="tel" maxlength="30">') +
+        label('phone','<input type="tel" required name="phone" autocomplete="tel" maxlength="30">') +
         label('proPassword','<input required type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128">') +
         profileFields(),'addPro') +
       '</section><section class="panel stack"><h2>' + t('profiles') + '</h2>' +
@@ -238,15 +255,34 @@ function dashboard(data) {
     panels + '<h2>' + t(heading) + '</h2>' + jobs + '</div>',user.role !== 'admin');
   message = '';
 }
+function exploreMenu() {
+  const groups = serviceGroups.map(([en, rw, services]) =>
+    '<details class="explore-group"><summary>' + e(language === 'rw' ? rw : en) +
+    '</summary><ul>' + services.map(([id]) =>
+      '<li>' + link('service/' + id, id) + '</li>'
+    ).join('') + '</ul></details>'
+  ).join('');
+  return '<details class="explore"><summary>' + t('explore') + '</summary>' +
+    '<div class="explore-panel">' + groups + '</div></details>';
+}
 async function render() {
   const version = ++viewVersion;
   document.documentElement.lang = language;
   document.querySelector('#footer-text').textContent = t('local');
-  nav.innerHTML = link('home','browse') +
+  nav.innerHTML = exploreMenu() + link('home','browse') +
     (user ? link('dashboard','dashboard') + '<button class="button quiet small" id="logout">' + t('logout') + '</button>'
       : link('register/pro','registerPro') + link('login','signIn','button small')) +
     '<button class="button quiet small" id="language" lang="' + (language === 'en' ? 'rw' : 'en') +
     '">' + (language === 'en' ? 'Kinyarwanda' : 'English') + '</button>';
+  const explore = nav.querySelector('.explore');
+  explore.onclick = event => {
+    const target = event.target.closest('a');
+    if (target) {
+      event.preventDefault();
+      explore.open = false;
+      navigate(target.hash.slice(1));
+    }
+  };
   nav.querySelector('#language').onclick = () => {
     language = language === 'en' ? 'rw' : 'en';
     localStorage.setItem('fixit-language',language);
@@ -275,8 +311,12 @@ async function render() {
     } else {
       const profiles = await api('profiles');
       if (version !== viewVersion) return;
-      if (route === 'home') home(profiles);
-      else {
+      const service = route.startsWith('service/') ? route.slice(8) : '';
+      if (route === 'home' || serviceNames.has(service)) {
+        filter.category = service;
+        home(profiles);
+        if (service) document.querySelector('#professionals').focus();
+      } else {
         const profile = profiles.find(p => route === 'pro/' + p.id);
         if (profile) professional(profile);
         else main.innerHTML = page('missing',link('home','back'),true);
@@ -317,6 +357,19 @@ main.addEventListener('submit',async event => {
     errorBox.textContent = t(error.message);
   } finally {
     submit.disabled = false;
+  }
+});
+document.addEventListener('click',event => {
+  const explore = nav.querySelector('.explore[open]');
+  if (explore && !explore.contains(event.target) && !event.target.closest('#all-services')) {
+    explore.open = false;
+  }
+});
+document.addEventListener('keydown',event => {
+  const explore = nav.querySelector('.explore[open]');
+  if (explore && event.key === 'Escape') {
+    explore.open = false;
+    explore.querySelector('summary').focus();
   }
 });
 window.addEventListener('hashchange',() => { window.scrollTo(0,0); render(); });

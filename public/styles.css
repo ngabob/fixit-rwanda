@@ -4,3 +4,54 @@
 .search{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;max-width:710px;background:#fff;padding:8px;border-radius:14px;color:var(--ink)}.search label{padding:4px 9px 2px;font-size:.75rem;color:var(--muted)}.search select{border:0;background:white;padding:2px 0;color:var(--ink);font-weight:700}.section{padding-block:37px}.heading{display:flex;gap:12px;align-items:baseline;justify-content:space-between;margin-bottom:17px}.tiles,.cards{display:grid;gap:12px}.tiles{grid-template-columns:repeat(6,1fr)}.tile,.card,.panel{background:#fff;border:1px solid var(--line);border-radius:15px}.tile{display:grid;gap:12px;text-align:left;padding:16px;color:var(--ink);font-weight:700;min-height:98px}.tile:hover,.tile[aria-pressed="true"]{border-color:var(--green);background:#edf4e3}.tile-icon,.avatar{display:grid;place-items:center;background:#e9f2df;border-radius:10px;width:36px;height:36px;color:var(--green);font-weight:800}.tile-icon{font-size:1.27rem}.cards{grid-template-columns:repeat(3,1fr)}.card,.panel{padding:20px}.card{display:grid;gap:12px;align-content:start}.card-top{display:flex;gap:12px;align-items:center}.avatar{width:45px;height:45px;flex:none}.tag{display:inline-block;background:#eaf2e8;color:var(--green);padding:3px 8px;border-radius:7px;font-size:.78rem;font-weight:700;width:max-content}.form{display:grid;gap:14px}.form label,.search label{display:grid;gap:4px}label{font-weight:700;font-size:.9rem}input,textarea,select{width:100%;border:1px solid #b8c8bd;color:var(--ink);padding:10px;border-radius:8px;background:#fff}textarea{min-height:100px;resize:vertical}.form .button{justify-self:start}.page{padding-block:44px;min-height:70vh}.page>h1{font-size:clamp(2rem,5vw,3.5rem);margin-bottom:20px}.narrow{max-width:640px}.stack{display:grid;gap:14px}.line{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.panel p{overflow-wrap:anywhere}.feedback{color:#9b321d;font-weight:700}.feedback:empty{display:none}.success{color:var(--green)}.quote{background:#eff4e9;padding:12px;border-radius:9px}.pre{white-space:pre-wrap}.profile-link{justify-self:start}.footer{border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}main{min-height:75vh}[hidden]{display:none!important}
 @media(max-width:850px){.tiles{grid-template-columns:repeat(3,1fr)}.cards{grid-template-columns:repeat(2,1fr)}.hero-art{opacity:.6}}
 @media(max-width:570px){.wrap{width:calc(100% - 32px)}.nav{align-items:flex-start;flex-direction:column}.hero-inner{padding-block:43px}.hero-art{top:13%;transform:none;opacity:.48}.search,.cards{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(2,1fr)}.heading{align-items:flex-start;flex-direction:column}.footer{align-items:flex-start;flex-direction:column}.page{padding-block:30px}}
+
+/* Explore services */
+nav { position: relative; }
+.explore > summary, .explore-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  outline-offset: 3px;
+}
+.explore > summary::-webkit-details-marker, .explore-group > summary::-webkit-details-marker { display: none; }
+.explore > summary { font-weight: 700; padding: 8px 3px; }
+.explore > summary::after, .explore-group > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+  margin: 0 3px 3px 0;
+  flex: none;
+}
+.explore[open] > summary::after, .explore-group[open] > summary::after {
+  transform: rotate(225deg);
+  margin-bottom: -3px;
+}
+.explore-panel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 9px);
+  right: 0;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(68vh, 520px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px 12px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 14px 38px #102e252b;
+}
+.explore-group + .explore-group { border-top: 1px solid var(--line); }
+.explore-group > summary { padding: 12px 5px; font-weight: 700; }
+.explore-group > summary:hover, .explore-group[open] > summary { color: var(--green); }
+.explore-group ul { margin: 0 0 10px; padding: 0; list-style: none; }
+.explore-group a { display: block; padding: 7px 10px; border-radius: 6px; }
+.explore-group a:hover { background: #edf4e3; }
+.search label { min-width: 0; }
+@media(max-width:570px) { .explore-panel { left: 0; right: auto; } }

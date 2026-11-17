@@ -1,3 +1,4 @@
+import { serviceNames } from './public/services.js';
 import { DatabaseSync } from 'node:sqlite';
 import { createServer } from 'node:http';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -46,7 +47,6 @@ if (!db.prepare('PRAGMA table_info(profiles)').all().some(column => column.name 
   db.exec('ALTER TABLE profiles ADD COLUMN phone TEXT');
 }
 
-const categories = ['plumbing', 'electrical', 'painting', 'cleaning', 'carpentry', 'appliances'];
 const districts = ['Gasabo', 'Kicukiro', 'Nyarugenge'];
 const select = (sql, ...params) => db.prepare(sql).all(...params);
 const one = (sql, ...params) => db.prepare(sql).get(...params);
@@ -88,16 +88,14 @@ function credentials(body) {
   return { email, password: body.password };
 }
 function contactPhone(value) {
-  if (value === undefined || value === '') return null;
   if (typeof value !== 'string' || value.length > 30) fail(400, 'invalidPhone');
   const text = value.trim();
-  if (!text) return null;
   const normalized = text.replace(/[\s().-]/g, '');
   if (!/^\+?[0-9]{7,15}$/.test(normalized)) fail(400, 'invalidPhone');
   return normalized;
 }
 function profileFields(body) {
-  if (!categories.includes(body.category) || !districts.includes(body.district)) fail(400, 'invalid');
+  if (!serviceNames.has(body.category) || !districts.includes(body.district)) fail(400, 'invalid');
   return [body.category, body.district, field(body, 'bio', 10, 500)];
 }
 function addUser(name, email, password, role) {
@@ -298,7 +296,7 @@ async function api(req, res, url) {
 }
 
 const assets = { '/': ['index.html', 'text/html'], '/styles.css': ['styles.css', 'text/css'],
-  '/app.js': ['app.js', 'text/javascript'] };
+  '/app.js': ['app.js', 'text/javascript'], '/services.js': ['services.js', 'text/javascript'] };
 const port = Number((hosted ? process.env.PORT : process.env.FIXIT_PORT) || 3000);
 createServer(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
